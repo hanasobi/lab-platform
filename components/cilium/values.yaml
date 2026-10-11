@@ -1,0 +1,32 @@
+devices: enp9s0 enp10s0
+encryption:
+  enabled: true
+  nodeEncryption: false
+  type: wireguard
+gatewayAPI:
+  enabled: true
+hubble:
+  enabled: true
+  metrics:
+    enabled:
+    - dns
+    - drop
+    - tcp
+    - flow
+    - icmp
+    - http
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+ipam:
+  mode: kubernetes
+k8sServiceHost: 192.168.1.51
+k8sServicePort: "6443"
+kubeProxyReplacement: true
+l2announcements:
+  enabled: true
+operator:
+  replicas: 1
+routingMode: tunnel
+tunnelProtocol: vxlan
