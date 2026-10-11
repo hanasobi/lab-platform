@@ -1,0 +1,14 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/hanasobi/lab-platform.git
+    targetRevision: main
+    path: components/gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gateway
