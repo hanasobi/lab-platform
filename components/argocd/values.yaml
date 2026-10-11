@@ -1,0 +1,9 @@
+# Argo CD v3.5.4, chart argo-cd 10.10.2
+global:
+  domain: argocd.lab.home.arpa
+
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
