@@ -1,0 +1,46 @@
+# The volumes must be mounted before containerd is installed and before
+# "kubeadm init" writes to /var/lib/etcd. Otherwise the data lands on the
+# root volume and a later mount hides it.
+- name: List existing logical volumes
+  ansible.builtin.command: lvs --noheadings -o lv_name {{ volume_group }}
+  register: lvs_out
+  changed_when: false
+  check_mode: false
+
+- name: Volumes for all nodes
+  ansible.builtin.include_tasks: volume.yaml
+  loop: "{{ volumes }}"
+  loop_control:
+    loop_var: vol
+    label: "{{ vol.lv }}"
+
+- name: Volume for etcd
+  ansible.builtin.include_tasks: volume.yaml
+  vars:
+    vol: "{{ etcd_volume }}"
+  when: control_plane | bool
+
+- name: Look for etcd data
+  ansible.builtin.stat:
+    path: "{{ etcd_volume.path }}/member"
+  register: etcd_member
+  when: control_plane | bool
+
+# kubeadm init and an etcd restore expect a directory that holds nothing but
+# etcd data. Only touched while etcd has not written anything yet.
+- name: Remove lost+found from the empty etcd volume
+  ansible.builtin.file:
+    path: "{{ etcd_volume.path }}/lost+found"
+    state: absent
+  when:
+    - control_plane | bool
+    - not etcd_member.stat.exists
+
+- name: Restrict the etcd data directory to root
+  ansible.builtin.file:
+    path: "{{ etcd_volume.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: control_plane | bool

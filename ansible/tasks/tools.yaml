@@ -1,0 +1,38 @@
+# Command line tools that are only needed where the cluster is managed.
+# Each one is installed when it is missing or has a different version.
+- name: Read the installed Helm version
+  ansible.builtin.command: helm version --short
+  register: helm_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install Helm
+  ansible.builtin.include_tasks: binary.yaml
+  vars:
+    tool:
+      name: Helm {{ helm_version }}
+      url: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ arch }}.tar.gz"
+      checksum: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ arch }}.tar.gz.sha256sum"
+      members:
+        - "linux-{{ arch }}/helm"
+  when: not (helm_installed.stdout | default('')).startswith(helm_version)
+
+- name: Read the installed cilium-cli version
+  ansible.builtin.command: cilium version --client
+  register: cilium_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install cilium-cli
+  ansible.builtin.include_tasks: binary.yaml
+  vars:
+    tool:
+      name: cilium-cli {{ cilium_cli_version }}
+      url: "https://github.com/cilium/cilium-cli/releases/download/{{ cilium_cli_version }}/cilium-linux-{{ arch }}.tar.gz"
+      checksum: "https://github.com/cilium/cilium-cli/releases/download/{{ cilium_cli_version }}/cilium-linux-{{ arch }}.tar.gz.sha256sum"
+      members:
+        - cilium
+  when: >-
+    ('cilium-cli: ' ~ cilium_cli_version ~ ' ') not in (cilium_installed.stdout | default(''))

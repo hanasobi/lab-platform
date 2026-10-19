@@ -1,0 +1,73 @@
+# Prepares a freshly installed Ubuntu Server 24.04 node for kubeadm.
+# Run it on the node itself, from this directory:
+#
+#   ansible-playbook node.yaml -K                  apply
+#   ansible-playbook node.yaml -K --check --diff   show what would change
+#
+# It stops before "kubeadm init" / "kubeadm join". See bootstrap/README.md.
+- name: Prepare a Kubernetes node
+  hosts: localhost
+  become: true
+
+  # The second file holds the settings of this node. It must exist:
+  # vars/<hostname>.yaml, for example vars/node-01.yaml.
+  vars_files:
+    - vars/common.yaml
+    - "vars/{{ ansible_facts['hostname'] }}.yaml"
+
+  pre_tasks:
+    # Ansible skips a missing vars file without a word. Stop here instead of
+    # halfway through.
+    - name: Check that this node has a settings file
+      ansible.builtin.assert:
+        that: control_plane is defined
+        fail_msg: >-
+          vars/{{ ansible_facts['hostname'] }}.yaml is missing.
+          Copy vars/node-01.yaml and adjust it.
+        quiet: true
+      tags: always
+
+  tasks:
+    - name: Base system
+      ansible.builtin.import_tasks: tasks/base.yaml
+      tags: base
+
+    - name: Storage
+      ansible.builtin.import_tasks: tasks/storage.yaml
+      tags: storage
+
+    - name: Container runtime
+      ansible.builtin.import_tasks: tasks/containerd.yaml
+      tags: containerd
+
+    - name: Kubernetes packages
+      ansible.builtin.import_tasks: tasks/kubernetes.yaml
+      tags: kubernetes
+
+    - name: Graceful shutdown
+      ansible.builtin.import_tasks: tasks/shutdown.yaml
+      tags: shutdown
+
+    - name: Control plane tooling
+      ansible.builtin.import_tasks: tasks/tools.yaml
+      when: control_plane | bool
+      tags: tools
+
+    - name: Control plane housekeeping
+      ansible.builtin.import_tasks: tasks/control-plane.yaml
+      when: control_plane | bool
+      tags: control-plane
+
+  handlers:
+    - name: Apply sysctl settings
+      ansible.builtin.command: sysctl --system
+      changed_when: true
+
+    - name: Restart containerd
+      ansible.builtin.systemd_service:
+        name: containerd
+        state: restarted
+
+    - name: Reload logind
+      ansible.builtin.command: systemctl kill -s HUP systemd-logind
+      changed_when: true

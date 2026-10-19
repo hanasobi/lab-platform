@@ -1,0 +1,39 @@
+- name: Install containerd
+  ansible.builtin.apt:
+    name: "containerd={{ containerd_version }}-*"
+    state: present
+
+# Without the hold, unattended-upgrades may move containerd to a new version
+# under a running cluster.
+- name: Hold containerd
+  ansible.builtin.dpkg_selections:
+    name: containerd
+    selection: hold
+
+- name: Create the configuration directory
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the default configuration
+  ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  notify: Restart containerd
+
+# kubelet uses the systemd cgroup driver, the runtime has to match.
+- name: Use the systemd cgroup driver
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  notify: Restart containerd
+
+- name: Enable and start containerd
+  ansible.builtin.systemd_service:
+    name: containerd
+    enabled: true
+    state: started

@@ -1,0 +1,36 @@
+# Values shared by all nodes. Per-node values live in vars/<hostname>.yaml.
+
+arch: amd64
+timezone: Europe/Berlin
+
+# Versions. Changing one of these is part of an upgrade, not of a normal run:
+# the packages are on hold, so apt refuses to move them from here.
+kubernetes_minor: "1.35"
+kubernetes_version: "1.35.6"
+containerd_version: "2.2.1"
+
+# Control plane tooling. etcd_version must match the etcd image of the
+# cluster (kubectl -n kube-system get pod -l component=etcd -o yaml | grep image:).
+helm_version: v4.2.0
+cilium_cli_version: v0.19.2
+etcd_version: v3.6.6
+
+# Storage. Volumes are created once and never resized by the playbook.
+# Grow one by hand: lvextend -r -L +100G /dev/<vg>/<lv>
+volume_group: ubuntu-vg
+volumes:
+  - lv: containerd-lv
+    size: 600g
+    path: /var/lib/containerd
+  - lv: pvc-lv
+    size: 700g
+    path: /var/lib/local-path-provisioner
+etcd_volume:
+  lv: etcd-lv
+  size: 20g
+  path: /var/lib/etcd
+  mkfs_opts: -L etcd
+
+# Upper limit for the shutdown delay in systemd-logind. Must not be lower
+# than shutdownGracePeriod in bootstrap/kubeadm-config.yaml.
+logind_inhibit_delay: 120

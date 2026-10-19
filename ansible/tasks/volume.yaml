@@ -1,0 +1,31 @@
+# One logical volume: create, format, mount. Expects "vol" (lv, size, path).
+- name: Create logical volume {{ vol.lv }}
+  community.general.lvol:
+    vg: "{{ volume_group }}"
+    lv: "{{ vol.lv }}"
+    size: "{{ vol.size }}"
+  when: vol.lv not in (lvs_out.stdout_lines | map('trim') | list)
+
+- name: Create the filesystem on {{ vol.lv }}
+  community.general.filesystem:
+    dev: "/dev/{{ volume_group }}/{{ vol.lv }}"
+    fstype: ext4
+    opts: "{{ vol.mkfs_opts | default(omit) }}"
+
+- name: Read the filesystem UUID of {{ vol.lv }}
+  ansible.builtin.command: blkid -s UUID -o value /dev/{{ volume_group }}/{{ vol.lv }}
+  register: vol_uuid
+  changed_when: false
+  check_mode: false
+
+# No "nofail": a node without its volumes must not start. etcd would
+# otherwise create a new, empty cluster on the root volume.
+- name: Mount {{ vol.lv }} at {{ vol.path }}
+  ansible.posix.mount:
+    path: "{{ vol.path }}"
+    src: "UUID={{ vol_uuid.stdout }}"
+    fstype: ext4
+    opts: defaults
+    dump: "0"
+    passno: "2"
+    state: mounted

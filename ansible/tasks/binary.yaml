@@ -1,0 +1,38 @@
+# Downloads a release archive, verifies its checksum and installs the listed
+# binaries to /usr/local/bin. Expects "tool": name, url, checksum, members.
+- name: Create a working directory for {{ tool.name }}
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: node-setup-
+  register: unpack_dir
+
+- name: Download, verify and install {{ tool.name }}
+  block:
+    - name: Download {{ tool.name }}
+      ansible.builtin.get_url:
+        url: "{{ tool.url }}"
+        dest: "{{ unpack_dir.path }}/archive.tar.gz"
+        checksum: "sha256:{{ tool.checksum }}"
+        mode: "0644"
+
+    - name: Unpack {{ tool.name }}
+      ansible.builtin.unarchive:
+        src: "{{ unpack_dir.path }}/archive.tar.gz"
+        dest: "{{ unpack_dir.path }}"
+        remote_src: true
+
+    - name: Install {{ tool.name }}
+      ansible.builtin.copy:
+        src: "{{ unpack_dir.path }}/{{ item }}"
+        dest: "/usr/local/bin/{{ item | basename }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      loop: "{{ tool.members }}"
+
+  always:
+    - name: Remove the working directory of {{ tool.name }}
+      ansible.builtin.file:
+        path: "{{ unpack_dir.path }}"
+        state: absent

@@ -1,0 +1,5 @@
+# The playbook runs on the node it configures. There is no control machine.
+all:
+  hosts:
+    localhost:
+      ansible_connection: local

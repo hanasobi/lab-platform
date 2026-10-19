@@ -1,0 +1,8 @@
+[Unit]
+Description=Beendete Pods zwei Minuten nach dem Start aufräumen
+
+[Timer]
+OnBootSec=2min
+
+[Install]
+WantedBy=timers.target

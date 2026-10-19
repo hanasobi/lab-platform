@@ -1,0 +1,24 @@
+# Graceful node shutdown needs two sides: systemd-logind allows the delay,
+# the kubelet asks for it (shutdownGracePeriod, set at "kubeadm init" in
+# bootstrap/kubeadm-config.yaml and handed to joining nodes by the cluster).
+- name: Create the drop-in directory of logind
+  ansible.builtin.file:
+    path: /etc/systemd/logind.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# The file name is part of the configuration: drop-ins from /etc and /usr/lib
+# are sorted by name and the last one wins. Ubuntu ships a drop-in of
+# unattended-upgrades with 30 seconds, so the name has to sort after "u".
+- name: Let services delay a shutdown
+  ansible.builtin.copy:
+    dest: /etc/systemd/logind.conf.d/zz-kubelet-shutdown.conf
+    content: |
+      [Login]
+      InhibitDelayMaxSec={{ logind_inhibit_delay }}
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload logind

@@ -1,0 +1,7 @@
+[Unit]
+Description=Beendete Pods nach dem Start aufräumen
+After=kubelet.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/k8s-prune-terminated.sh

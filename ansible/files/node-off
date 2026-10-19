@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Snapshot ziehen, dann sauber herunterfahren.
+set -euo pipefail
+systemctl start etcd-snapshot.service
+systemctl poweroff

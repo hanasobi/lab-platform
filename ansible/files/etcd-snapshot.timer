@@ -1,0 +1,9 @@
+[Unit]
+Description=etcd-Snapshot, täglich und nach verpasstem Lauf
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

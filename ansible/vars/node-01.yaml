@@ -1,0 +1,2 @@
+# node-01: first node, control plane and worker in one.
+control_plane: true

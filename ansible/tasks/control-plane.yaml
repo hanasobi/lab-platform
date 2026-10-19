@@ -1,0 +1,80 @@
+# etcd snapshots, cleanup of pods left behind by a shutdown, and the
+# power-off command. All of it belongs to the node that runs etcd.
+- name: Read the installed etcdctl version
+  ansible.builtin.command: etcdctl version
+  register: etcdctl_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read the installed etcdutl version
+  ansible.builtin.command: etcdutl version
+  register: etcdutl_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install etcdctl and etcdutl
+  ansible.builtin.include_tasks: binary.yaml
+  vars:
+    etcd_release: "etcd-{{ etcd_version }}-linux-{{ arch }}"
+    tool:
+      name: etcdctl and etcdutl {{ etcd_version }}
+      url: "https://github.com/etcd-io/etcd/releases/download/{{ etcd_version }}/{{ etcd_release }}.tar.gz"
+      checksum: "https://github.com/etcd-io/etcd/releases/download/{{ etcd_version }}/SHA256SUMS"
+      members:
+        - "{{ etcd_release }}/etcdctl"
+        - "{{ etcd_release }}/etcdutl"
+  when: >-
+    ('etcdctl version: ' ~ etcd_version[1:]) not in (etcdctl_installed.stdout | default(''))
+    or ('etcdutl version: ' ~ etcd_version[1:]) not in (etcdutl_installed.stdout | default(''))
+
+- name: Install the housekeeping scripts
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "/usr/local/sbin/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - { src: etcd-snapshot.sh, dest: etcd-snapshot.sh }
+    - { src: k8s-prune-terminated.sh, dest: k8s-prune-terminated.sh }
+    - { src: node-off, dest: node-off }
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Install the systemd units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - etcd-snapshot.service
+    - etcd-snapshot.timer
+    - k8s-prune-terminated.service
+    - k8s-prune-terminated.timer
+  register: units
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: units is changed
+
+- name: Look for an initialised cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: admin_conf
+
+# Before "kubeadm init" the timers are only enabled. Started without a
+# cluster, both services would wait five minutes and then fail. Run the
+# playbook again after the bootstrap, or reboot, to start them.
+- name: Enable the timers, start them once the cluster exists
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: "{{ 'started' if admin_conf.stat.exists else omit }}"
+  loop:
+    - etcd-snapshot.timer
+    - k8s-prune-terminated.timer
