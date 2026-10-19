@@ -163,6 +163,9 @@ Checks:
     sudo grep -i shutdown /var/lib/kubelet/config.yaml
 
 - `NotReady` and `Pending` are expected: there is no pod network yet.
+- The four control plane pods may show a few restarts right after init
+  (7 on node-01 in October 2026). That is fine as long as the number stays
+  the same a few minutes later.
 - The taints must show `node.kubernetes.io/not-ready` only. A taint
   `node-role.kubernetes.io/control-plane` would keep all ordinary pods off
   the node.
@@ -237,18 +240,27 @@ delete the secret:
     kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
     kubectl -n argocd delete secret argocd-initial-admin-secret
 
-The UI has no route at the gateway yet. Open it through an SSH tunnel from
-the workstation and a port-forward in that session, user `admin`, at
-`https://localhost:8080`:
+The UI has no route at the gateway yet. Open it through an SSH tunnel.
+The first command runs on the workstation and opens a session on the node,
+the second one runs in that session:
 
+    # on the workstation
     ssh -L 8080:localhost:8080 <user>@192.168.1.51
+    # on the node, in the session just opened
     kubectl port-forward svc/argocd-server -n argocd 8080:443
 
+Then open `https://localhost:8080` on the workstation, user `admin`. If the
+port-forward reports "address already in use", the tunnel command was run
+on the node by mistake: `exit` that session and start the tunnel on the
+workstation.
+
 Run the playbook a second time. It starts the two timers, which it only
-enables while there is no cluster. Nothing else may change:
+enables while there is no cluster. Expected: `changed=1` (one task starts
+both timers), `failed=0`. A third run must report `changed=0`.
 
     cd ~/lab-platform/ansible
     ansible-playbook node.yaml -K
+    systemctl list-timers etcd-snapshot.timer k8s-prune-terminated.timer --no-pager
 
 First etcd snapshot:
 
@@ -279,6 +291,14 @@ operating system, the network configuration, the volumes and
 `/var/lib/local-path-provisioner`. Details are in its header.
 
 Before: everything in `~/lab-platform` is committed and pushed.
+
+Expected output that is no error:
+
+- `Failed to remove containers ... DeadlineExceeded` from `kubeadm reset`.
+  Stopping a pod also tears down its network, which needs the Cilium agent
+  that is going away. The reset waits about two minutes and continues. The
+  leftover containers die with the reboot.
+- The Cilium interfaces in the final listing. They go with the reboot.
 
     cd ~/lab-platform && git status
     sudo ./bootstrap/teardown-node.sh

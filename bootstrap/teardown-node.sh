@@ -56,7 +56,7 @@ if [[ "${1:-}" != "--yes" ]]; then
   echo ""
   warn "This removes the Kubernetes cluster on $(hostname) for good:"
   warn "  cluster, etcd, certificates, container images, node tooling."
-  if [[ -d "$PV_DIR" && -n "$(ls -A "$PV_DIR" 2>/dev/null)" ]]; then
+  if [[ -d "$PV_DIR" && -n "$(ls -A -I lost+found "$PV_DIR" 2>/dev/null)" ]]; then
     warn ""
     warn "  $PV_DIR is not empty. The data stays on disk,"
     warn "  but the new cluster will not know these volumes."
@@ -91,6 +91,9 @@ systemctl disable --now etcd-snapshot.timer k8s-prune-terminated.timer >/dev/nul
 # ----------------------------------------------------------------------------
 
 log "[2/7] kubeadm reset..."
+# "Failed to remove containers ... DeadlineExceeded" is expected here: the
+# kubelet and the Cilium agent are going away, so stopping a pod cannot tear
+# down its network in time. The containers die with the reboot.
 if command -v kubeadm >/dev/null 2>&1; then
   kubeadm reset --force || warn "  kubeadm reset reported an error, continuing"
 else
@@ -152,7 +155,11 @@ log "[5/7] Removing cluster state..."
 rm -rf /etc/kubernetes
 rm -rf --one-file-system /var/lib/kubelet \
   || warn "  /var/lib/kubelet not removed completely, the reboot releases the rest"
-rm -rf /etc/cni/net.d/* /var/run/cilium /var/lib/cilium
+rm -rf /etc/cni/net.d/*
+# Only /var/lib/cilium. /var/run is a tmpfs and empty after the reboot, and
+# Cilium mounts the cgroup2 hierarchy below /var/run/cilium. Never descend
+# into another file system here.
+rm -rf --one-file-system /var/lib/cilium
 empty_dir /var/lib/etcd
 empty_dir /var/lib/containerd
 
@@ -198,7 +205,7 @@ for dir in /var/lib/etcd /var/lib/containerd; do
   fi
 done
 if [[ -d "$PV_DIR" ]]; then
-  echo "  $PV_DIR: kept, $(find "$PV_DIR" -mindepth 1 -maxdepth 1 | wc -l) entries"
+  echo "  $PV_DIR: kept, $(find "$PV_DIR" -mindepth 1 -maxdepth 1 ! -name lost+found | wc -l) entries"
 fi
 
 echo ""
